@@ -1221,7 +1221,7 @@ p.next = null; // help GC
 
 &emsp;**独占式超时获取锁 tryAcquireNanos 模版方法可以被视作响应中断获取锁 acquireInterruptibly 方法的 “增强版”，支持中断，支持超时时间！**
 
-```
+```java
 /**
  * 独占式超时获取锁，支持中断
  *
@@ -1244,12 +1244,15 @@ public final boolean tryAcquireNanos(int arg, long nanosTimeout)
 
 ### 5.6.1 doAcquireNanos 独占式超时获取锁
 
-&emsp;d**oAcquireNanos(int arg,long nanosTimeout) 方法在支持响应中断的基础上， 增加了超时获取的特性。**  
+&emsp;**doAcquireNanos(int arg,long nanosTimeout) 方法在支持响应中断的基础上， 增加了超时获取的特性。**  
+
 &emsp;该方法在自旋过程中，当结点的前驱结点为头结点时尝试获取锁，如果获取成功则从该方法返回，这个过程和独占式同步获取的过程类似，但是在锁获取失败的处理上有所不同。  
+
 &emsp;如果当前线程获取锁失败，则判断是否超时（nanosTimeout 小于等于 0 表示已经超时），如果没有超时，重新计算超时间隔 nanosTimeout，然后使当前线程等待 nanosTimeout 纳秒（当已到设置的超时时间，该线程会从 LockSupport.parkNanos(Objectblocker,long nanos) 方法返回）。  
+
 &emsp; **如果 nanosTimeout 小于等于 spinForTimeoutThreshold（1000 纳秒）时，将不会使该线程进行超时等待，而是进入快速的自旋过程。原因在于，非常短的超时等待无法做到十分精确，如果这时再进行超时等待，相反会让 nanosTimeout 的超时从整体上表现得反而不精确。** 因此，在超时非常短的场景下，AQS 会进入无条件的快速自旋而不是挂起线程。
 
-```
+```java
 static final long spinForTimeoutThreshold = 1000L;
 
 /**
@@ -1390,14 +1393,17 @@ private boolean doAcquireNanos(int arg, long nanosTimeout)
 ------------------------
 
 &emsp;共享式获取与独占式获取的区别就是同一时刻是否可以多个线程同时获取到锁。  
-&emsp;在独占锁的实现中会使用一个 exclusiveOwnerThread 属性，用来记录当前持有锁的线程。当独占锁已经被某个线程持有时，其他线程只能等待它被释放后，才能去争锁，并且同一时刻只有一个线程能争锁成功。  
+
+&emsp;**在独占锁的实现中会使用一个 exclusiveOwnerThread 属性，用来记录当前持有锁的线程**。当独占锁已经被某个线程持有时，其他线程只能等待它被释放后，才能去争锁，并且同一时刻只有一个线程能争锁成功。  
+
 &emsp;对于共享锁来说，如果一个线程成功获取了共享锁，那么其他等待在这个共享锁上的线程就也可以尝试去获取锁，并且极有可能获取成功。基于共享式实现的组件有 CountDownLatch、Semaphore 等。  
+
 &emsp;通过调用 AQS 的 acquireShared 模版方法方法可以共享式地获取锁，同样该方法不响应中断。实际上如果看懂了独占式获取锁的源码，那么看共享式获取锁的源码就非常简单了。大概步骤如下：
 
 1.  首先使用 tryAcquireShared 尝试获取锁，获取成功（返回值大于等于 0）则直接返回；
 2.  否则，调用 doAcquireShared 将当前线程封装为 Node.SHARED 模式的 Node 结点后加入到 AQS 同步队列的尾部，然后 "自旋" 尝试获取锁，如果还是获取不到，那么最终使用 park 方法挂起自己等待被唤醒。
 
-```
+```java
 /**
  * 共享式获取锁的模版方法，不响应中断
  *
@@ -1416,16 +1422,18 @@ public final void acquireShared(int arg) {
 ### 5.8.1 tryAcquireShared 尝试获取共享锁
 
 &emsp;**熟悉的 tryAcquireShared 方法，这个方法我们在最开头讲 “AQS 的设计” 时就提到过，该方法是 AQS 的子类即我们自己实现的，用于尝试获取共享锁，一般来说就是对 state 的改变、或者重入锁的检查等等，不同的锁有自己相应的逻辑判断，这里不多讲，后面讲具体锁的实现的时候（比如 CountDownLatch）会讲到。**  
+
 &emsp;**返回 int 类型的值（比如返回剩余的 state 状态值 - 资源数量），一般的理解为：**
 
 1.  如果返回值小于 0，表示当前线程共享锁失败；
 2.  如果返回值大于 0，表示当前线程共享锁成功，并且接下来其他线程尝试获取共享锁的行为很可能成功；
 3.  如果返回值等于 0，表示当前线程共享锁成功，但是接下来其他线程尝试获取共享锁的行为会失败。  
-    实际上在 AQS 的实际实现中，即使某时刻返回值等于 0，接下来其他线程尝试获取共享锁的行为也可能会成功。即某线程获取锁并且返回值等于 0 之后，马上又有线程释放了锁，导致实际上可获取锁数量大于 0，此时后继还是可以尝试获取锁的。
+    
+&emsp;实际上在 AQS 的实际实现中，即使某时刻返回值等于 0，接下来其他线程尝试获取共享锁的行为也可能会成功。即某线程获取锁并且返回值等于 0 之后，马上又有线程释放了锁，导致实际上可获取锁数量大于 0，此时后继还是可以尝试获取锁的。
 
 &emsp;**在 AQS 的中 tryAcquireShared 的实现为抛出异常，因此需要子类重写：**
 
-```
+```java
 protected int tryAcquireShared(int arg) {
     throw new UnsupportedOperationException();
 }
@@ -1440,7 +1448,7 @@ protected int tryAcquireShared(int arg) {
 
 &emsp;**每个结点可以尝试获取锁的要求是前驱结点是头结点，那么它本身就是整个队列中的第二个结点，每个获得锁的结点都一定是成为过头结点。那么如果某第二个结点因为不满足条件没有获取到共享锁而被挂起，那么即使后续结点满足条件也一定不能获取到共享锁。**
 
-```
+```java
 /**
  * 自旋尝试共享式获取锁，一段时间后可能会挂起
  * 和独占式获取的区别：
@@ -1491,7 +1499,7 @@ private void doAcquireShared(int arg) {
 }
 ```
 
-&emsp;**从源码可以看出，和独占式获取的主要区别为：**
+**从源码可以看出，和独占式获取的主要区别为：**
 
 1.  addWaiter 以共享模式 Node.SHARED 添加结点。
 2.  获取到锁之后，调用 setHeadAndPropagate 设置行 head 结点，然后根据传播状态判断是否要唤醒后继结点。。
@@ -1507,7 +1515,7 @@ private void doAcquireShared(int arg) {
 
 &emsp;**doReleaseShared 用于在共享模式下唤醒后继结点。关于 Node.PROPAGATE 的分析，将在下面总结部分列出！**
 
-```
+```java
 /**
  * 共享式获取锁的核心方法，尝试唤醒一个后继线程，被唤醒的线程会尝试获取共享锁，如果成功之后，则又会有可能调用setHeadAndPropagate，将唤醒传播下去。
  * 独占锁只有在一个线程释放所之后才会唤醒下一个线程，而共享锁在一个线程在获取到锁和释放掉锁锁之后，都可能会调用这个方法唤醒下一个线程
@@ -1550,7 +1558,7 @@ private void doReleaseShared() {
 }
 ```
 
-5.9 reaseShared 共享式释放锁
+5.9 realseShared 共享式释放锁
 ----------------------
 
 &emsp;**共享锁的释放是通过调用 releaseShared 模版方法来实现的。大概步骤为：**
@@ -1558,9 +1566,9 @@ private void doReleaseShared() {
 1.  调用 tryReleaseShared 尝试释放共享锁，这里必须实现为线程安全。
 2.  如果释放了锁，那么调用 doReleaseShared 方法唤醒后继结点，实现唤醒的传播。
 
- &emsp **对于支持共享式的同步组件 (即多个线程同时访问)，它们和独占式的主要区别就是 tryReleaseShared 方法必须确保锁的释放是线程安全的 (因为既然是多个线程能够访问，那么释放的时候也会是多个线程的，就需要保证释放时候的线程安全)。由于 tryReleaseShared 方法也是我们自己实现的，因此需要我们自己实现线程安全，所以常常采用 CAS 的方式来释放同步状态。**
+&emsp; **对于支持共享式的同步组件 (即多个线程同时访问)，它们和独占式的主要区别就是 tryReleaseShared 方法必须确保锁的释放是线程安全的 (因为既然是多个线程能够访问，那么释放的时候也会是多个线程的，就需要保证释放时候的线程安全)。由于 tryReleaseShared 方法也是我们自己实现的，因此需要我们自己实现线程安全，所以常常采用 CAS 的方式来释放同步状态。**
 
-```
+```java
 /**
  * 共享模式下释放锁的模版方法。
  * ，如果成功释放则会调用
@@ -1581,7 +1589,7 @@ public final boolean releaseShared(int arg) {
 
 &emsp;**上面分析的独占式获取锁的方法 acquireShared 是不会响应中断的。但是 AQS 提供了另外一个 acquireSharedInterruptibly 模版方法，调用该方法的线程在等待获取锁时，如果当前线程被中断，会立刻返回，并抛出 InterruptedException。**
 
-```
+```java
 /**
  * 共享式可中断获取锁模版方法
  *
@@ -1603,9 +1611,10 @@ public final void acquireSharedInterruptibly(int arg)
 ### 5.10.1 doAcquireSharedInterruptibly 共享式可中断获取锁
 
 &emsp;**该方法内部操作和 doAcquireShared 差不多，都是自旋获取共享锁，有些许区别，就是在后续挂起的线程因为线程被中断而返回时的处理方式不一样。**  
+
 &emsp;**共享式不可中断获取锁仅仅是记录该状态，interrupted = true，紧接着又继续循环获取锁；共享式可中断获取锁则直接抛出异常，因此会直接跳出循环去执行 finally 代码块。**
 
-```
+```java
 /**
  * 以共享可中断模式获取。
  *
@@ -1654,7 +1663,7 @@ private void doAcquireSharedInterruptibly(int arg)
 
 &emsp;**共享式超时获取锁 tryAcquireSharedNanos 模版方法可以被视作共享式响应中断获取锁 acquireSharedInterruptibly 方法的 “增强版”，支持中断，支持超时时间！**
 
-```
+```java
 /**
  * 共享式超时获取锁，支持中断
  *
@@ -1663,7 +1672,6 @@ private void doAcquireSharedInterruptibly(int arg)
  * @return 是否获取锁成功
  * @throws InterruptedException 如果被中断，则抛出InterruptedException异常
  */
-
 public final boolean tryAcquireSharedNanos(int arg, long nanosTimeout)
         throws InterruptedException {
     //最开始就检查一次，如果当前线程是被中断状态，则清除已中断状态，并抛出异常
@@ -1680,11 +1688,14 @@ public final boolean tryAcquireSharedNanos(int arg, long nanosTimeout)
 ### 5.11.1 doAcquireSharedNanos 共享式超时获取锁
 
 &emsp;**doAcquireSharedNanos (int arg,long nanosTimeout) 方法在支持响应中断的基础上， 增加了超时获取的特性。**  
+
 &emsp;该方法在自旋过程中，当结点的前驱结点为头结点时尝试获取锁，如果获取成功则从该方法返回，这个过程和共享式式同步获取的过程类似，但是在锁获取失败的处理上有所不同。  
+
 &emsp;如果当前线程获取锁失败，则判断是否超时（nanosTimeout 小于等于 0 表示已经超时），如果没有超时，重新计算超时间隔 nanosTimeout，然后使当前线程等待 nanosTimeout 纳秒（当已到设置的超时时间，该线程会从 LockSupport.parkNanos(Objectblocker,long nanos) 方法返回）。  
+
 &emsp;如果 nanosTimeout 小于等于 spinForTimeoutThreshold（1000 纳秒）时，将不会使该线程进行超时等待，而是进入快速的自旋过程。原因在于，非常短的超时等待无法做到十分精确，如果这时再进行超时等待，相反会让 nanosTimeout 的超时从整体上表现得反而不精确。因此，在超时非常短的场景下，AQS 会进入无条件的快速自旋而不是挂起线程。
 
-```
+```java
 static final long spinForTimeoutThreshold = 1000L;
 
 /**
@@ -1748,7 +1759,9 @@ private boolean doAcquireSharedNanos(int arg, long nanosTimeout)
 ------------------
 
 &emsp;我们可以调用 acquireShared 模版方法来获取不可中断的共享锁，可以调用 acquireSharedInterruptibly 模版方法来可中断的获取共享锁，可以调用 tryAcquireSharedNanos 模版方法来可中断可超时的获取共享锁，在此之前需要重写 tryAcquireShared 方法；还可以调用 releaseShared 模版方法来释放共享锁，在此之前需要重写 tryReleaseShared 方法。  
+
 &emsp;对于共享锁来说，由于锁是可以多个线程同时获取的。那么如果一个线程成功获取了共享锁，那么其他等待在这个共享锁上的线程就也可以尝试去获取锁，并且极有可能获取成功。因此在一个结点线程释放共享锁成功时，必定调用 doReleaseShared 尝试唤醒后继结点，而在一个结点线程获取共享锁成功时，也可能会调用 doReleaseShared 尝试唤醒后继结点。  
+
 &emsp;基于共享式实现的组件有 CountDownLatch、Semaphore、ReentrantReadWriteLock 等。
 
 ### 5.12.1. Node.PROPAGATE 简析
@@ -1756,56 +1769,89 @@ private boolean doAcquireSharedNanos(int arg, long nanosTimeout)
 #### 5.12.1.1 出现时机
 
 &emsp;doReleaseShared 方法在线程获取共享锁成功之后可能执行，在线程释放共享锁成功之后必定执行。  
+
 &emsp;在 doReleaseShared 方法中，可能会存在将线程状态设置为 Node.PROPAGATE 的情况，然而，整个 AQS 类中也只有这一处直接涉及到 Node.PROPAGATE 状态，并且仅仅是设置，在其他地方却再也没见到对该状态的直接使用。由于该状态值为 - 3，因此可能是在其他方法中对 waitStatus 大小范围的判断的时候将这种情况包括进去了（猜测）！  
+
 &emsp;关于 Node.PROPAGATE 的直接代码如下：
 
-```
+```java
 else if (ws == 0 &&!compareAndSetWaitStatus(h, 0, Node.PROPAGATE))
     continue;                // loop on failed CAS
 ```
 
 &emsp;首先是需要进入到 else if 分支，然后需要此时 ws(源码中最开始获取的 head 结点的引用的状态—不一定是最新的) 状态为 0，然后尝试 CAS 设置该结点的状态为 Node.PROPAGATE，并且可能失败，失败之后直接 continue 继续下一次循环。  
+
 &emsp;对于这个 Node.PROPAGATE 状态的作用，众说纷纭，笔者看了很多文章，很多看起来都有道理，但是仔细想想又有些差错，在此，笔者不做过多个人分析，首先来看看进入 else if 分支并且 ws 为 0 的情况有哪些！
 
 1.  **初始情况**  
-    &emsp;假设某个共享锁的实现允许最多三个线程持有锁，此时有线程 A、B、C 均获取到了锁，同步队列中还有一个被挂起的结点线程 D 在等待锁的释放，此时队列结构如下：  
-    ![](https://img-blog.csdnimg.cn/20200703094949919.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl80Mzc2NzAxNQ==,size_16,color_FFFFFF,t_70)  
-    &emsp;如果此时线程 A 释放了锁，那么 A 将会调用 doReleaseShared 方法，但是明显 A 将会进入 if 代码块中，将 head 的状态改为 0，同时调用 unparkSuccessor 唤醒一个后继线程，这里明显是 D。此时同步队列结构为：  
-    ![](https://img-blog.csdnimg.cn/2020070309514792.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl80Mzc2NzAxNQ==,size_16,color_FFFFFF,t_70)
-2.  **情形 1**  
-    &emsp;如果此时线程 B、C 都释放了锁，那么 B、C 都将会调用 doReleaseShared 方法，假设它们执行速度差不多，那么它们都将会进入到 else if 中，因为此时 head 的状态变成了 0，然后它们都会调用 CAS 将 0 改成 Node.PROPAGATE，此时只会有一条线程成功，另一条会失败。  
-    &emsp;**这就是 释放锁时，进入到 else if 的一种情况。即多个释放锁的结点操作同一个 head，那么最终只有一个结点能够在 if 中成功调用 unparkSuccessor 唤醒后继，另外的结点都将失败并最终都会走到 else if 中去。同理，获取锁时也可能由于上面的原因而进入到 else if。**
-3.  **情形 2**  
-    &emsp;如果此时又来了一个新结点 E，由于同样没有获取到锁那么会调用 addWaiter 添加到 D 结点后面成为新 tail 结点。  
-    &emsp;然后结点 E 会在 shouldParkAfterFailedAcquire 方法中尝试将没取消的前驱 D 的 waitStatus 修改为 Node.SIGNAL，然后挂起。  
-    &emsp;**那么在新结点 E 执行 addWaiter 之后，执行 shouldParkAfterFailedAcquire 之前，此时同步队列结构为：**  
-    ![](https://img-blog.csdnimg.cn/20200703095454159.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl80Mzc2NzAxNQ==,size_16,color_FFFFFF,t_70)  
-    &emsp;由于 A 释放了锁，那么线程 D 会被唤醒，并调用 tryAcquireShared 获取了锁，那么将会返回 0（常见的共享锁获取锁的实现是使用 state 减去需要获取的资源数量，这里 A 释放了一把锁，D 又获取一把锁，此时剩余资源—锁数量剩余 0）。  
-    &emsp;**此时，如果 B 再释放锁，这就出现了 “即使某时刻返回值等于 0，接下来其他线程尝试获取共享锁的行为也可能会成功” 的情况。即 某线程获取共享锁并且返回值等于 0 之后，马上又有其他持有锁的线程释放了锁，导致实际上可获取锁数量大于 0，此时后继还是可以尝试获取锁的。**  
-    &emsp;上面的是题外话，我们回到正文。**如果此时 B 释放了锁，那么肯定还是会走 doReleaseShared 方法，由于在初始情形中，head 的状态已经被 A 修改为 0，此时 B 还是会走 else if ，将状态改为 Node.PROPAGATE。**  
-    ![](https://img-blog.csdnimg.cn/20200703095551730.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl80Mzc2NzAxNQ==,size_16,color_FFFFFF,t_70)  
-    &emsp;我们回到线程 D，此时线程 D 获取锁之后会走到 setHeadAndPropagate 方法中，在进行 sheHead 方法调用之后，此时结构如下（假设线程 E 由于资源分配的原因，在此期间效率低下，还没有将前驱 D 的状态改为 - 1，或者由于单核 CPU 线程切换导致线程 E 一直没有分配到时间片）：  
-    ![](https://img-blog.csdnimg.cn/202007030956275.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl80Mzc2NzAxNQ==,size_16,color_FFFFFF,t_70)  
-    &emsp;sheHead 之后，就会判断是否需要调用 doReleaseShared 方法唤醒后继线程，这里的判断条件是：
 
-```
+&emsp;假设某个共享锁的实现允许最多三个线程持有锁，此时有线程 A、B、C 均获取到了锁，同步队列中还有一个被挂起的结点线程 D 在等待锁的释放，此时队列结构如下：  
+
+![](images/aqs/广播1.png)  
+
+&emsp;如果此时线程 A 释放了锁，那么 A 将会调用 doReleaseShared 方法，但是明显 A 将会进入 if 代码块中，将 head 的状态改为 0，同时调用 unparkSuccessor 唤醒一个后继线程，这里明显是 D。此时同步队列结构为：  
+ 
+![](images/aqs/0ec0a415.png)
+
+2.  **情形 1**  
+
+&emsp;如果此时线程 B、C 都释放了锁，那么 B、C 都将会调用 doReleaseShared 方法，假设它们执行速度差不多，那么它们都将会进入到 else if 中，因为此时 head 的状态变成了 0，然后它们都会调用 CAS 将 0 改成 Node.PROPAGATE，此时只会有一条线程成功，另一条会失败。  
+
+&emsp;**这就是释放锁时，进入到 else if 的一种情况。即多个释放锁的结点操作同一个 head，那么最终只有一个结点能够在 if 中成功调用 unparkSuccessor 唤醒后继，另外的结点都将失败并最终都会走到 else if 中去。同理，获取锁时也可能由于上面的原因而进入到 else if。**
+
+3.  **情形 2**  
+ 
+ &emsp;如果此时又来了一个新结点 E，由于同样没有获取到锁那么会调用 addWaiter 添加到 D 结点后面成为新 tail 结点。  
+ 
+ &emsp;然后结点 E 会在 shouldParkAfterFailedAcquire 方法中尝试将没取消的前驱 D 的 waitStatus 修改为 Node.SIGNAL，然后挂起。  
+ 
+ &emsp;**那么在新结点 E 执行 addWaiter 之后，执行 shouldParkAfterFailedAcquire 之前，此时同步队列结构为：**  
+
+![](images/aqs/广播3.png) 
+
+&emsp;由于 A 释放了锁，那么线程 D 会被唤醒，并调用 tryAcquireShared 获取了锁，那么将会返回 0（常见的共享锁获取锁的实现是使用 state 减去需要获取的资源数量，这里 A 释放了一把锁，D 又获取一把锁，此时剩余资源—锁数量剩余 0）。  
+
+&emsp;**此时，如果 B 再释放锁，这就出现了 “即使某时刻返回值等于 0，接下来其他线程尝试获取共享锁的行为也可能会成功” 的情况。即 某线程获取共享锁并且返回值等于 0 之后，马上又有其他持有锁的线程释放了锁，导致实际上可获取锁数量大于 0，此时后继还是可以尝试获取锁的。**  
+
+&emsp;上面的是题外话，我们回到正文。**如果此时 B 释放了锁，那么肯定还是会走 doReleaseShared 方法，由于在初始情形中，head 的状态已经被 A 修改为 0，此时 B 还是会走 else if ，将状态改为 Node.PROPAGATE。**  
+
+![](images/aqs/广播4.png)  
+
+&emsp;我们回到线程 D，此时线程 D 获取锁之后会走到 setHeadAndPropagate 方法中，在进行 sheHead 方法调用之后，此时结构如下（假设线程 E 由于资源分配的原因，在此期间效率低下，还没有将前驱 D 的状态改为 - 1，或者由于单核 CPU 线程切换导致线程 E 一直没有分配到时间片）：  
+
+![](images/aqs/广播5.png)  
+ 
+&emsp;sheHead 之后，就会判断是否需要调用 doReleaseShared 方法唤醒后继线程，这里的判断条件是：
+
+```java
 propagate > 0 || h == null || h.waitStatus < 0 ||(h = head) == null || 
 h.waitStatus < 0
 ```
 
 &emsp;**根据结构，只有第三个条件 h.waitStatus<0 满足，此时线程 D 就可以调用 doReleaseShared 唤醒后继结点，在这个过程中，关键的就是线程 B 将老 head 的状态设置为 Node.PROPAGATE，即 - 2，小于 0，此时可以将唤醒传播下去，否则被唤醒的线程 A 将因为不满足条件而不会调用 doReleaseShared 方法！**  
+
 &emsp;或许这就是所谓的 Node.PROPAGATE 可能将唤醒传播下去的考虑到的情况之一？  
+
 &emsp;而在此时获取锁的线程 D 调用 doReleaseShared 方法时，由于此时 head 状态本来就是 0，因此直接进入 else if 将状态改为 Node.PROPAGATE，表示此时后继结点不需要唤醒，但是需要将唤醒操作继续传播下去。  
+
 &emsp;**这也是在获取锁时，在 doReleaseShared 方法中第一次出现某结点作为 head 就直接进入到 else if 的一种情况。**  
+
 3) **情形 3**  
+
 &emsp;由于 A 释放了锁，那么如果 D 的获取了锁，并且方法执行完毕，那么此时同步队列结构如下：  
-![](https://img-blog.csdnimg.cn/2020070309584910.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl80Mzc2NzAxNQ==,size_16,color_FFFFFF,t_70)  
-&emsp;此时又来了一个新结点 E，由于同样没有获取到锁那么会调用 addWaiter 添加到 head  
-结点后面成为新 tail 结点。  
+
+![](images/aqs/广播6.png)  
+
+&emsp;此时又来了一个新结点 E，由于同样没有获取到锁那么会调用 addWaiter 添加到 head  结点后面成为新 tail 结点。  
+
 &emsp;然后结点 E 会在 shouldParkAfterFailedAcquire 方法中尝试将没取消的前驱 head 的 waitStatus 修改为 Node.SIGNAL，然后挂起。  
+
 &emsp;那么在新结点 E 执行 addWaiter 之后，执行 shouldParkAfterFailedAcquire 之前，此时同步队列结构为：  
-![](https://img-blog.csdnimg.cn/20200703095914480.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl80Mzc2NzAxNQ==,size_16,color_FFFFFF,t_70)  
+
+![](images/aqs/广播7.png)  
+
 &emsp;**此时线程 A 尝试释放锁，释放锁成功后一定会都调用 doReleaseShared 方法时，由于此时 head 状态本来就是 0，因此直接进入 else if 将状态改为 Node.PROPAGATE，表示此时后继结点不需要唤醒，但是需要将唤醒操作继续传播下去。**  
+
 &emsp; **这也是在释放锁的时候，在 doReleaseShared 方法中第一次出现某结点作为 head 就直接进入到 else if 的一种情况。**
 
 #### 5.12.1.2 总结
@@ -1817,6 +1863,7 @@ h.waitStatus < 0
 3.  对于释放锁的 doReleaseShared 方法，有一种在 doReleaseShared 方法中第一次出现结点某作为 head 就直接进入到 else if 的一种情况。设结点 D 作为原队列的尾结点，此时状态值为 0，并且已经获取到了锁；然后又来了新结点 E，在新结点 E 的线程调用 addWaiter 之后（加入队列成为新 tail），shouldParkAfterFailedAcquire 之前（没来得及修改前驱 D 的状态为 - 1）的这段特殊时间范围之内，此时结点 D 的线程释放了锁，那么就会出现 在释放锁时调用 doReleaseShared 并直接进入 else if 的情况，这种情况的要求极为苛刻。或许本就不存在，只是本人哪里的分析出问题了？
 
 &emsp;**那么根据上面的情况来看，就算没有 else if 这个判断或者如果没有 Node.PROPAGATE 这个状态的设置，最终对于后续结点的唤醒并没有什么大的问题，也并不会导致队列失活。**  
+
 &emsp;**加上 Node.PROPAGATE 这个状态的设置，导致的直接结果是可能会增加 doReleaseShared 方法调用的次数，但是也会增加无效、无意义唤醒的次数。** 在 setHeadAndPropagate 方法中，判断是否需要唤醒后继的源码注释中我们能找到这样的描述：
 
 > The conservatism in both of these checks may cause unnecessary wake-ups, but only when there are multiple racing acquires/releases, so most need signals now or soon anyway.
@@ -1830,10 +1877,12 @@ h.waitStatus < 0
 -------------
 
 &emsp;在最开始我们实现了简单的不可重入独占锁，现在我们尝试实现可重入的独占锁，实际上也比较简单！  
+
 &emsp;AQS 的 state 状态值表示线程获取该锁的重入次数， 在默认情况下，state 的值为 0 表示当前锁没有被任何线程持有。当一个线程第一次获取该锁时会尝试使用 CAS 设置 state 的值为 l ，如果 CAS 成功则当前线程获取了该锁，然后记录该锁的持有者为当前线程。在该线程没有释放锁的情况下第二次获取该锁后，状态值被设置为 2，这就是重入次数为 2。在该线程释放该锁时，会尝试使用 CAS 让状态值减 1，如果减 l 后状态值为 0，则当前线程释放该锁。  
+
 &emsp;**对于可重入独占锁，获取了几次锁就需要释放几次锁，否则由于锁释放不完全而阻塞其他线程！**
 
-```
+```java
 /**
  * @author lx
  */
@@ -1970,7 +2019,7 @@ public class ReentrantExclusiveLock implements Lock {
 
 ### 6.1.1 测试
 
-```
+```java
 /**
  * @author lx
  */
@@ -2027,12 +2076,16 @@ public class ReentrantExclusiveLockTest {
 -------------
 
 &emsp;自定义一个共享锁，共享锁的数量可以自己指定。默认构造情况下，在同一时刻，最多允许三条线程同时获取锁，超过三个线程的访问将被阻塞。  
+
 &emsp;我们必须重写 tryAcquireShared(int args) 方法和 tryReleaseShared(int args) 方法。由于是共享式的获取，那么在对同步状态 state 更新时，两个方法中都需要使用 CAS 方法 compareAndSet(int expect,int update) 做原子性保障。  
+
 &emsp;假设一条线程一次只需要获取一个资源即表示获取到锁。由于同一时刻允许至多三个线程的同时访问，表明同步资源数为 3，这样可以设置初始状态 state 为 3 来代表同步资源，当一个线程进行获取，status 减 1，该线程释放，则 status 加 1，状态的合法范围为 0、1 和 2，其中 0 表示当前已经有两个线程获取了同步资源，此时再有其他线程对同步状态进行获取，该线程可能会被阻塞。  
+
 &emsp;最后，将自定义的 AQS 实现通过内部类的方法聚合到自定义锁中，自定义锁还需要实现 Lock 接口，外部方法的内部实现直接调用对应的模版方法即可。  
+
 &emsp;这里一条线程可以获取多次共享锁，但是同时必须释放多次共享锁，否则可能由于锁资源的减少，导致效率低下甚至死锁（可以使用 tryLock 避免）！
 
-```
+```java
 public class ShareLock implements Lock {
     /**
      * 默认构造器，默认共享资源3个
@@ -2152,7 +2205,7 @@ public class ShareLock implements Lock {
 
 ### 6.2.1 测试
 
-```
+```java
 public class ShareLockTest {
 
     static final ShareLock lock = new ShareLock();
@@ -2221,12 +2274,19 @@ public class ShareLockTest {
 ### 7.1.1 Object 监视器与 Condition
 
 &emsp;任意一个 Java 对象，都拥有一与之关联的唯一的监视器对象 monitor（该对象是在 HotSpot 源码中使用 C++ 实现的），为此 Java 为每个对象提供了一组监视器方法（定义在 java.lang.Object 上），主要包括 wait()、wait(long timeout)、notify() 以及 notifyAll() 方法，这些方法与 synchronized 同步关键字配合，可以实现等待 / 通知模式。具体可以看 Synchronized 的原理：[Java 中的 synchronized 的底层实现原理以及锁升级优化详解](https://blog.csdn.net/weixin_43767015/article/details/105544786)。  
+
 &emsp;Condition(又称条件变量) 接口也提供了类似 Object 的监视器方法，与 Lock 配合可以实现等待 / 通知模式，但是这两者在使用方式以及功能特性上还是有差别的。Object 的监视器方法与 Condition 接口的对比如下（来自网络）：  
-![](https://img-blog.csdnimg.cn/20200703101007567.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl80Mzc2NzAxNQ==,size_16,color_FFFFFF,t_70)  
+
+![](images/aqs/condition.png)  
+
 &emsp;Condition 可以和任意的锁对象结合，监视器方法不会再绑定到某个锁对象上。使用 Lock 锁之后，相当于 Lock 替代了 synchronized 方法和语句的使用，Condition 替代了 Object 监视器方法的使用。  
+
 &emsp;在 Condition 中，Condition 对象当中封装了监视器方法，并用 await() 替换 wait()，用 signal() 替换 notify()，用 signalAll() 替换 notifyAll()，传统线程的通信方式，Condition 都可以实现，这里注意，Condition 是被绑定到 Lock 上的，要创建一个 Lock 的 Condition 必须用 newCondition() 方法。如果在没有获取到锁前调用了条件变量的 await 方法则会抛出 java.lang.IllegalMonitorStateException 异常。  
+
 &emsp;synchronized 同时只能与一个共享变量的 notify 或 wait 方法实现同步，而 AQS 的一个锁可以对应多个条件变量。  
+
 &emsp;Condition 的强大之处还在于它可以为多个线程间建立不同的 Condition，使用 synchronized/wait() 只有一个条件队列，notifyAll 会唤起条件队列下的所有线程，而使用 lock-condition，可以实现多个条件队列，signalAll 只会唤起某个条件队列下的等待线程。  
+
 &emsp;**另外 AQS 只提供了 ConditionObject 的实现，并没有提供获取 Condition 的 newCondition 方法对应的模版方法，需要由 AQS 的子类来提供具体实现，通常是直接调用 ConditionObject 的构造器 new 一个对象返回。一个锁对象可以多次调用 newCondition 方法，因此一个锁对象可以对应多个 Condition 对象！**
 
 ### 7.1.2 常用 API 方和使用示例
@@ -2236,7 +2296,7 @@ public class ShareLockTest {
 &emsp;Condition 定义了等待 / 通知两种类型的方法，当前线程调用这些方法时，需要提前获取到 Condition 对象关联的锁。Condition 对象是由 Lock 对象（调用 Lock 对象的 newCondition() 方法）创建出来的，换句话说，Condition 是依赖 Lock 对象的。  
 &emsp;**下面示例 Condition 实现有界同步队列（生产消费）：**
 
-```
+```java
 /**
  * 使用Condition实现有界队列
  */
@@ -2326,20 +2386,24 @@ public class BoundedQueue<T> {
 }
 ```
 
-&emsp;首先需要获得锁，目的是确保数组修改的可见性和排他性。当数组数量等于数组长度时，  
-表示数组已满，则调用 notFull.await()，当前线程随之释放锁并进入等待状态。如果数组数量不等于数组长度，表示数组未满，则添加元素到数组中，同时通知等待在 notEmpty 上的线程，数组中已经有新元素可以获取。  
+&emsp;首先需要获得锁，目的是确保数组修改的可见性和排他性。当数组数量等于数组长度时，表示数组已满，则调用 notFull.await()，当前线程随之释放锁并进入等待状态。如果数组数量不等于数组长度，表示数组未满，则添加元素到数组中，同时通知等待在 notEmpty 上的线程，数组中已经有新元素可以获取。  
+
 &emsp;在添加和删除方法中使用 while 循环而非 if 判断，目的是防止过早或意外的通知，只有条件符合才能够退出循环。
 
 7.2 条件队列的结构
 -----------
 
 &emsp;每一个 AQS 对象中包含一个同步队列，类似的，**每个 Condition 对象中都包含着一个队列（以下称为等待 / 条件队列），用来存放调用该 Condition 对象的 await() 方法时被阻塞的线程。该队列是 Condition 实现等待 / 通知机制的底层关键数据结构。**  
+
 &emsp;**条件队列同样是一个 FIFO 的队列，结点的类型直接复用的同步队列的结点类型—AQS 的静态内部类 AbstractQueuedSynchronizer.Node。一个 Condition 对象的队列中每个结点包含的线程就是在该 Condition 对象上等待的线程，那么如果一个锁对象获取了多个 Condition 对象，就可能会有不同的线程在不同的 Condition 对象上等待！**  
+
 &emsp;**如果一个获取到锁的线程调用了 Condition.await() 方法，那么该线程将会被构造成等待类型为 Node.CONDITION 的 Node 结点加入等待队列尾部并释放锁，加入对应 Condition 对象的条件队列尾部并挂起（WAITING）。**  
+
 &emsp;**如果某个线程中调用某个 Condition 的 signal/signalAll 方法，对应 Condition 对象的条件队列的结点会转移到锁内部的 AQS 对象的同步队列中，并且在获取到锁之后，对应的线程才可以继续恢复执行后续代码。**  
+
 &emsp;**ConditionObject 中持有条件队列的头结点引用 firstWaiter 和尾结点引用 lastWaiter。**
 
-```
+```java
 public abstract class AbstractQueuedSynchronizer
             extends AbstractOwnableSynchronizer
             implements java.io.Serializable {
@@ -2385,40 +2449,51 @@ public abstract class AbstractQueuedSynchronizer
 ```
 
 &emsp;Condition 的实现是 AQS 的内部类 ConditionObject，因此每个 Condition 实例都能够访问 AQS 提供的方法，相当于每个 Condition 都拥有所属 AQS 的引用。  
+
 &emsp;和 AQS 中的同步队列不同的是，条件队列是一个单链表，结点之间使用 nextWaiter 引用维持后继的关系，并不会用到 prev, next 属性，它们的值都为 null，并且没有哨兵结点，大概结构如下：  
-![](https://img-blog.csdnimg.cn/20200703115521789.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl80Mzc2NzAxNQ==,size_16,color_FFFFFF,t_70)  
+
+![](images/aqs/condition2.png)  
+
 &emsp;如图所示，Condition 拥有首尾结点的引用，而新增结点只需要将原有的尾结点 nextWaiter 指向它，并且更新尾结点即可。上述结点引用更新的过程并没有使用 CAS 保证，原因在于调用 await() 方法的线程必定是获取了锁的线程，也就是说该过程是由锁来保证线程安全的。  
+
 &emsp;在 Object 的监视器模型上，一个监视器对象只能拥有一个同步队列和等待队列，而 JUC 中的一个同步组件实例可以拥有一个同步队列和多个条件队列，其对应关系如下图：  
-![](https://img-blog.csdnimg.cn/20200703115616837.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl80Mzc2NzAxNQ==,size_16,color_FFFFFF,t_70)
+
+![](images/aqs/condition3.png)
 
 7.3 等待机制原理
 ----------
 
 &emsp;调用 Condition 的 await()、await(long time, TimeUnit unit)、awaitNanos(long nanosTimeout)、awaitUninterruptibly()、awaitUntil(Date deadline) 方法时，会使当前线程构造成一个等待类型为 Node.CONDITION 的 Node 结点加入等待队列尾部并释放锁，同时线程状态变为等待状态（WAITING）。而当从 await() 方法返回时，当前线程一定获取了 Condition 相关联的锁。  
+
 &emsp;对于同步队列和条件队列这两个两个队列来说，当调用 await() 方法时，相当于同步队列的头结点（获取了锁的结点）移动到 Condition 的等待队列成为尾结点（只是一个比喻，实际上并没有移动）。  
+
 &emsp;**AQS 的 Node 的 waitStatus 使用 Node.CONDITION（-2）来表示结点处于等待状态，如果条件队列中的结点不是 Node.CONDITION 状态，那么就认为该结点就不再等待了，需要出队列。**
 
 ### 7.3.1 await() 响应中断等待
 
 &emsp;调用该方法的线程也一定是成功获取了锁的线程，也就是同步队列中的首结点，如果一个没有获得锁的线程调用此方法，那么可能会抛出异常！  
+
 &emsp;await 方法用于将当前线程构造成结点并加入等待队列中，并释放锁，然后当前线程会进入等待状态，等待唤醒。  
+
 &emsp;当等待队列中的结点线程因为 signal、signalAll 或者被中断而唤醒，则会被移动到同步队列中，然后在 await 中尝试获取锁。如果是在其他线程调用 signal、signalAll 方法之前就因为中断而被唤醒了，则会抛出 InterruptedException，并清除当前线程的中断状态。  
+
 &emsp;该方法响应中断。最终，如果该方法能够返回，那么该线程一定是又一次重新获取到锁了。  
+
 &emsp;**大概步骤为：**
 
 1.  最开始就检查一次，如果当前线程是被中断状态，则清除已中断状态，并抛出异常
 2.  调用 addConditionWaiter 方法，将当前线程封装成 Node.CONDITION 类型的 Node 结点链接到条件队列尾部，返回新加的结点，该过程中将移除取消等待的结点。
 3.  调用 fullyRelease 方法，一次性释放当前线程所占用的所有的锁（重入锁），并返回取消时的同步状态 state 值。
 4.  循环，调用 isOnSyncQueue 方法判断结点是否被转移到了同步队列中：  
-    a) 如果不在同步队列中，那么 park 挂起当前线程，不在执行后续代码。  
-    b) 如果被唤醒，那么调用 checkInterruptWhileWaiting 检查线程被唤醒的原因，并且使用 interruptMode 字段记录中断模式。  
-    c) 如果此时线程时中断状态，那么 break 跳出循环，否则，进行下一次循环判断。
+    - 如果不在同步队列中，那么 park 挂起当前线程，不在执行后续代码。  
+    - 如果被唤醒，那么调用 checkInterruptWhileWaiting 检查线程被唤醒的原因，并且使用 interruptMode 字段记录中断模式。  
+    - 如果此时线程时中断状态，那么 break 跳出循环，否则，进行下一次循环判断。
 5.  到这一步，结点一定是加入同步队列中了。那么使用 acquireQueued 自旋获取独占锁，将锁重入次数原封不动的写回去。
 6.  获取到锁之后，判断如果在获取锁的等待过程中被中断，并且之前的中断模式不为 THROW\_IE（可能是 0），那么设置中断模式为 REINTERRUPT。
 7.  如果结点后继不为 null，说明是 “在调用 signal 或者 signalAll 方法之前就因为中断而被唤醒” 的情况，发生这种情况时结点是没有从条件队列中移除的，此时需要移除。这里直接调用调用 unlinkCancelledWaiters 对条件队列再次进行整体清理。
 8.  如果中断模式不为 0，那么调用 reportInterruptAfterWait 方法对不同的中断模式做出处理。
 
-```
+```java
 /**
  * 位于ConditionObject中的方法
  * 当前线程进入等待状态，直到被通知或中断
@@ -2472,12 +2547,13 @@ public final void await() throws InterruptedException {
 #### 7.3.1.1 addConditionWaiter 添加结点到条件队列
 
 &emsp;**同步队列的首结点并不会直接加入等待队列，而是通过 addConditionWaite 方法把当前线程构造成一个新的结点并将其加入等待队列中。**  
+
 &emsp;**addConditionWaiter 方法用于将当前线程封装成 Node.CONDITION 类型的结点链接到条件队列尾部。大概有两步：**
 
 1.  首先获取条件队列尾结点，如果尾结点不是等待状态，那么调用 unlinkCancelledWaiters 对整个链表做一个清理，清除不是等待状态的结点；
 2.  将当前线程包装成 Node.CONDITION 类型的 Node 加入条件队列尾部，这里不需要 CAS，因为此时线程已经获得了锁，不存在并发的情况。
 
-```
+```java
 /**
  * 位于ConditionObject中的方法
  * 当前线程封装成Node.CONDITION类型的Node结点链接到条件队列尾部
@@ -2513,7 +2589,7 @@ private Node addConditionWaiter() {
 
 &emsp;**unlinkCancelledWaiters 方法会从头开始遍历整个单链表，清除所有取消等待的结点，比较简单！**
 
-```
+```java
 /**
  * 位于ConditionObject中的方法
  * 从头开始遍历整个条件队列链表，清除所有不在等待状态的结点
@@ -2554,7 +2630,9 @@ private void unlinkCancelledWaiters() {
 #### 7.3.1.3 fullyRelease 释放所有重入锁
 
 &emsp;**await 中锁的释放都是独占式的。由于可能是可重入锁，因此 fullyRelease 方法会将当前获取锁的线程的全部重入锁都一次性释放掉。例如某个线程的锁重入了一次，此时 state 变成 2，在 await 中会一次性将 2 变成 0。**  
+
 &emsp;**我们常说说 await 方法必须要在获取锁之后调用，因为在 fullyRelease 中会调用 release 独占式的释放锁，而 release 中调用了 tryRelease 方法，对于独占锁的释放，我们的实现会检查是否是当前获取锁的线程，如果不是，那么会抛出 IllegalMonitorStateException 异常。**  
+
 &emsp;**fullyRelease 大概步骤如下：**
 
 1.  获取当前的同步状态 state 的值 savedState，调用 release 释放全部锁包括重入的；
@@ -2562,7 +2640,7 @@ private void unlinkCancelledWaiters() {
 3.  释放失败同样也会抛出 IllegalMonitorStateException 异常。
 4.  finally 中，释放成功什么也不做；释放失败则将新添加进条件队列的结点状态设置为 Node.CANCELLED，即算一种非等待状态。
 
-```
+```java
 /**
  * 位于AQS中的方法，在结点被添加到条件队列中之后调用
  * 尝试释放当前线程所占用的所有的锁，并返回当前的锁的同步状态state
@@ -2602,7 +2680,7 @@ final int fullyRelease(Node node) {
 
 &emsp;**isOnSyncQueue 用于检测结点是否在同步队列中，如果 await 等待的线程被唤醒 / 中断，那么对应的结点会被转移到同步队列之中！**
 
-```
+```java
 /**
  * 位于AQS中的方法，在fullyRelease之后调用
  * 判断结点是否在同步队列之中
@@ -2648,7 +2726,7 @@ private boolean findNodeFromTail(Node node) {
 
 &emsp;**await 将线程中断的状态根据在不同情况下的中断分成三种模式，除了下面的两种之外，还使用 0 表示没有中断。在 await 方法的最后，会根据不同的中断模式做出不同的处理。**
 
-```
+```java
 /**
  * 中断模式
  * 退出await方法之前，需要设置中断状态，由于此时已经获得了锁，即相当于设置一个标志位。
@@ -2668,7 +2746,7 @@ private static final int THROW\_IE = -1;
 1.  判断此时线程的中断状态，并清除中断状态。如果是中断状态，那么调用 transferAfterCancelledWait 方法判断那是在什么时候中断的；否则，返回 0，说明是调用 signal 或者 signalAll 方法之后被唤醒的，并且没有中断。
 2.  transferAfterCancelledWait 方法中，如果是因为在调用 signal 或者 signalAll 之前就被中断了，那么会将该结点状态设置为 0，并调用 enq 方法加入到同步队列中，返回 THROW\_IE 模式，表示在 await 方法的最后会抛出异常；否则那就是在调用 signal 或者 signalAll 方法之后被中断的，那么在等待结点成功加入同步队列之后，返回 REINTERRUPT 模式，表示在 await 方法最后会重新设置中断状态。
 
-```
+```java
 /**
  * Condition中的方法
  * 检查被唤醒线程的中断状态，返回中断模式
@@ -2724,7 +2802,7 @@ final boolean transferAfterCancelledWait(Node node) {
 1.  如果是 THROW\_IE 模式，即在调用 signal 或者 signalAll 之前就被中断了，那么抛出 InterruptedException 异常。
 2.  如果是 REINTERRUPT 模式，即在调用 signal 或者 signalAll 方法之后被中断，那么简单的设置一个中断状态为 true。
 
-```
+```java
 /**
  * 中断模式的处理：
  * 如果是THROW\_IE模式，那么抛出InterruptedException异常
@@ -2745,7 +2823,7 @@ private void reportInterruptAfterWait(int interruptMode)
 &emsp;如果在超时时间范围之内被唤醒了，则返回 true；否则返回 false。  
 &emsp;该方法响应中断。最终，如果该方法能够返回，那么该线程一定是又一次重新获取到锁了。
 
-```
+```java
 /**
  * 超时等待
  *
@@ -2804,7 +2882,7 @@ public final boolean await(long time, TimeUnit unit)
 &emsp;如果在超时时间点之前被唤醒了，则返回 true；否则返回 false。  
 &emsp;该方法响应中断。最终，如果该方法能够返回，那么该线程一定是又一次重新获取到锁了。
 
-```
+```java
 /**
  * 超时等待指定时间点
  *
@@ -2855,7 +2933,7 @@ public final boolean awaitUntil(Date deadline)
 &emsp;返回（超时时间 - 实际返回所用时间）。如果返回值是 0 或者负数，那么可以认定已经超时了。  
 &emsp;该方法响应中断。最终，如果该方法能够返回，那么该线程一定是又一次重新获取到锁了。
 
-```
+```java
 /**
  * 超时等待指定纳秒，若指定时间内返回，则返回 nanosTimeout-已经等待的时间；
  *
@@ -2908,7 +2986,7 @@ public final long awaitNanos(long nanosTimeout)
 &emsp;其它线程调用该条件对象的 signal() 或 signalALL() 方法唤醒等待的线程之后，该线程才可能从 awaitUninterruptibly 方法中返回。等待过程中如果当前线程被中断，该方法仍然会继续等待，同时保留该线程的中断状态。  
 &emsp;最终，如果该方法能够返回，那么该线程一定是又一次重新获取到锁了。
 
-```
+```java
 /**
  * 当前线程进入等待状态直到被通知(signal或者signalAll)而唤醒，不响应中断。
  */
@@ -2940,12 +3018,12 @@ public final void awaitUninterruptibly() {
 
 ### 7.4.1 signal 通知单个线程
 
-&emsp;**signal 方法首先进行了 isHeldExclusively 检查，也就是当前线程必须是获取了锁的线程，否则抛出异常。接着将会尝试唤醒在条件队列中等待时间最长的结点，将其移动到同步队列并使用 LockSupport 唤醒结点中的线程。**大概步骤如下：**
+&emsp;signal 方法首先进行了 isHeldExclusively 检查，也就是当前线程必须是获取了锁的线程，否则抛出异常。接着将会尝试唤醒在条件队列中等待时间最长的结点，将其移动到同步队列并使用 LockSupport 唤醒结点中的线程。**大概步骤如下：**
 
 1.  检查调用 signal 方法的线程是否是持有锁的线程，如果不是则直接抛出 IllegalMonitorStateException 异常。
 2.  调用 doSignal 方法将等待时间最长的一个结点从条件队列转移至同步队列尾部，然后根据条件可能会尝试唤醒该结点对应的线程。
 
-```
+```java
 /**
  * Conditon中的方法
  * 将等待时间最长的结点移动到同步队列，然后unpark唤醒
@@ -2983,7 +3061,7 @@ protected final boolean isHeldExclusively() {
 
 &emsp;**doSignal 方法将在 do while 中从头结点开始向后遍历整个条件队列，从条件队列中移除等待时间最长的结点，并将其加入到同步队列，在此期间会清理一些遍历时遇到的已经取消等待的结点。**
 
-```
+```java
 /**
  * Conditon中的方法
  * 从头结点开始向后遍历，从条件队列中移除等待时间最长的结点，并将其加入到同步队列
@@ -3018,7 +3096,7 @@ private void doSignal(Node first) {
 2.  CAS 成功，则表示该结点是处于等待状态，那么调用 enq 将结点添加到同步队列尾部，返回添加结点在同步队列中的前驱结点。
 3.  获取前驱结点的状态 ws。如果 ws 大于 0，则表示前驱已经被取消了或者将 ws 改为 Node.SIGNAL 失败，表示前驱可能在此期间被取消了，那么调用 unpark 方法唤醒被转移结点中的线程，好让它从 await 中的等待中醒来；否则，那就由它的前驱结点在获取锁之后释放锁时再唤醒。返回 true。
 
-```
+```java
 /**
  * 将结点从条件队列转移到同步队列，并尝试唤醒
  *
@@ -3056,7 +3134,7 @@ final boolean transferForSignal(Node node) {
 1.  检查调用 signalAll 方法的线程是否是持有锁的线程，如果不是则直接抛出 IllegalMonitorStateException 异常。
 2.  调用 doSignalAll 方法将条件队列中的所有等待状态的结点转移至同步队列尾部，然后根据条件可能会尝试唤醒该结点对应的线程，相当于清空了条件队列。
 
-```
+```java
 /**
  * Conditon中的方法
  * 将次Condition中的所有等待状态的结点 从条件队列移动到同步队列中。
@@ -3082,7 +3160,7 @@ public final void signalAll() {
 
 &emsp;**移除并尝试转移条件队列的所有结点，实际上会将条件队列清空。对每个结点调用 transferForSignal 方法。**
 
-```
+```java
 /**
  * Conditon中的方法
  * 移除并尝试转移条件队列的所有结点，实际上会将条件队列清空
@@ -3117,7 +3195,7 @@ private void doSignalAll(Node first) {
 &emsp;使用 Lock 和 Condition 实现简单的生产消费案例，生产一个产品就需要消费一个产品，一次最多只能生产、消费一个产品  
 &emsp;常见实现是：如果存在商品，那么生产者等待，并唤醒消费者；如果没有商品，那么消费者等待，并唤醒生产者！
 
-```
+```java
 public class ProducerAndConsumer {
     public static void main(String\[\] args) {
         Resource resource = new Resource();
@@ -3250,7 +3328,7 @@ public class ProducerAndConsumer {
 &emsp;使用 Lock 和 Condition 实现较复杂的的生产消费案例，实现一个中间仓库，产品被存储在仓库之中，可以连续生产、消费多个产品。  
 &emsp;这个实现，可以说就是简易版的消息队列！
 
-```
+```java
 /**
  * @author lx
  */
@@ -3408,7 +3486,7 @@ public class BoundedBuffer {
 &emsp;编写一个程序，开启 3 个线程，这三个线程的 name 分别为 A、B、C，每个线程将自己的名字 在屏幕上打印 10 遍，要求输出的结果必须按名称顺序显示，例如：ABCABCABC…  
 &emsp;这个案例中，我们需要手动控制相关线程在指定线程之前执行。
 
-```
+```java
 /**
  * @author lx
  */
@@ -3538,9 +3616,13 @@ public class PrintABC {
 ====
 
 &emsp;AQS 是 JUC 中实现同步组件的基础框架，有了 AQS 我们自己也能比较轻松的实现自定义的同步组件。  
+
 &emsp;AQS 中提供了同步队列的实现，用于实现锁的获取和释放，没有获取到锁的线程将进入同步队列排队等待，是实现线程同步的基础。  
+
 &emsp;AQS 内部还提供了条件队列的实现，条件队列用于实现线程之间的主动等待、唤醒机制，是实现线程 有序可控 同步的不可缺少的部分。  
+
 &emsp;一个锁对应一个同步队列，对应多个条件变量，每个条件变量有自己的一个条件队列，这样就可以实现按照业务需求让不同的线程在不同的条件队列上等待，相对于 Synchronized 的只有一个条件队列，功能更加强大！  
+
 &emsp;**最后，当我们深入源码时，发现对于最基础的同步支持，比如可见性、原子性、线程等待、唤醒等操作，AQS 也是调用的其他工具、或者利用了其他特性：**
 
 1.  同步状态 state 被设置为 **volatile** 类型，这样在获取、更新时保证了可见性，还可以禁止重排序！
@@ -3549,6 +3631,7 @@ public class PrintABC {
 4.  对于线程等待、唤醒，是调用了 **LockSupport** 的 park、unpark 方法，如果去看 LockSupport 的源码，那么实际上最终还是调用 Unsafe 类中的方法！
 
 &emsp;**AQS 框架是 JUC 中的同步组件的基石，如果再去尝试寻找构建 AQS 的基石的话，通过 AQS 的 Java 源码我们可以发现就是：volatile 修饰符、CAS（UNSAFE）操作、LockSupport（park、unpark）操作。**  
+
 &emsp;**学习了 AQS，对于我们后续将会进行的 Lock 锁等 JUC 同步组件的实现分析将会大有帮助！**
 
 **相关文章：**  
@@ -3557,4 +3640,3 @@ public class PrintABC {
 &emsp;CAS：[Java 中的 CAS 实现原理解析与应用](https://blog.csdn.net/weixin_43767015/article/details/106342879)。  
 &emsp;UNSAFE：[JUC—Unsafe 类的原理详解与使用案例](https://blog.csdn.net/weixin_43767015/article/details/104643890)。
 
-> 如果有什么不懂或者需要交流，可以留言。另外希望点赞、收藏、关注，我将不间断更新各种 Java 学习博客！
