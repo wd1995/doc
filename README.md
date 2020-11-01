@@ -12,7 +12,7 @@
 ## juc
 
 1. **[线程池源码解读](./docs/java/juc/线程池源码解读.md)**
-2. **[AQS](./docs/java/juc/AQS.md)**
+2. **[AQS](./docs/java/juc/1.%20AQS%20深入理解源码.md)**
 ## jvm
 
 ## concurrent
